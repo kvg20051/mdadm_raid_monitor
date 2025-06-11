@@ -2,6 +2,25 @@
 
 A simple bash script that monitors your MDADM RAID arrays and sends notifications via Telegram when issues are detected, such as drive failures or array status changes.
 
+## System Requirements
+
+- Linux system with software RAID (mdadm)
+- Bash shell
+- `curl` for Telegram API communication
+- Root access (for monitoring RAID status)
+- Telegram bot token and chat ID
+- System with cron daemon installed
+
+### Required Commands
+The script requires these commands to be available:
+```bash
+mdadm    # For RAID management
+curl     # For Telegram notifications
+grep     # For text processing
+awk      # For text processing
+sed      # For text processing
+```
+
 ## Features
 
 - Monitors RAID array status and health
@@ -172,6 +191,25 @@ To remove the RAID monitor:
 
 A bash script that monitors RAID arrays and sends notifications via Telegram when issues are detected.
 
+## System Requirements
+
+- Linux system with software RAID (mdadm)
+- Bash shell
+- `curl` for Telegram API communication
+- Root access (for monitoring RAID status)
+- Telegram bot token and chat ID
+- System with cron daemon installed
+
+### Required Commands
+The script requires these commands to be available:
+```bash
+mdadm    # For RAID management
+curl     # For Telegram notifications
+grep     # For text processing
+awk      # For text processing
+sed      # For text processing
+```
+
 ## Features
 
 - Monitors all RAID arrays in the system
@@ -193,27 +231,67 @@ A bash script that monitors RAID arrays and sends notifications via Telegram whe
    cd raid-monitor
    ```
 
-2. Create a configuration file:
+2. Install required packages (if not already installed):
    ```bash
-   cp raid_monitor.conf.example raid_monitor.conf
+   # For Debian/Ubuntu
+   sudo apt-get update
+   sudo apt-get install mdadm curl
+
+   # For RHEL/CentOS
+   sudo yum install mdadm curl
    ```
 
-3. Edit the configuration file with your Telegram settings:
+3. Create a configuration file in one of these locations:
    ```bash
-   nano raid_monitor.conf
+   # Option 1: Same directory as script
+   sudo cp raid_monitor.conf.example raid_monitor.conf
+   
+   # Option 2: System-wide config
+   sudo cp raid_monitor.conf.example /opt/raid_monitor.conf
+   
+   # Option 3: System config directory
+   sudo cp raid_monitor.conf.example /etc/raid_monitor.conf
    ```
+
+4. Edit the configuration file with your Telegram settings:
+   ```bash
+   # If using local config
+   sudo nano raid_monitor.conf
+   
+   # If using system-wide config
+   sudo nano /opt/raid_monitor.conf
+   
+   # If using system config
+   sudo nano /etc/raid_monitor.conf
+   ```
+   
    Add your Telegram bot token and chat ID:
    ```bash
    TELEGRAM_BOT_TOKEN="your_bot_token_here"
    TELEGRAM_CHAT_ID="your_chat_id_here"
    ```
 
-4. Make the script executable:
+5. Set proper permissions:
    ```bash
-   chmod +x raid_monitor.sh
+   # For local config
+   sudo chown root:root raid_monitor.conf
+   sudo chmod 600 raid_monitor.conf
+   
+   # For system-wide config
+   sudo chown root:root /opt/raid_monitor.conf
+   sudo chmod 600 /opt/raid_monitor.conf
+   
+   # For system config
+   sudo chown root:root /etc/raid_monitor.conf
+   sudo chmod 600 /etc/raid_monitor.conf
    ```
 
-5. Test the script:
+6. Make the script executable:
+   ```bash
+   sudo chmod +x raid_monitor.sh
+   ```
+
+7. Test the script:
    ```bash
    sudo ./raid_monitor.sh
    ```
@@ -229,7 +307,10 @@ A bash script that monitors RAID arrays and sends notifications via Telegram whe
 
 ## Configuration
 
-The script uses a configuration file (`raid_monitor.conf`) for sensitive settings. This file should be kept secure and not committed to version control.
+The script uses a configuration file for settings. The script will look for the config file in these locations (in order):
+1. Same directory as the script (`raid_monitor.conf`)
+2. System-wide config (`/opt/raid_monitor.conf`)
+3. System config directory (`/etc/raid_monitor.conf`)
 
 ### Configuration Options
 
@@ -240,133 +321,166 @@ The script uses a configuration file (`raid_monitor.conf`) for sensitive setting
 
 ### Security
 
-- The configuration file should be readable only by the root user:
-  ```bash
-  sudo chown root:root raid_monitor.conf
-  sudo chmod 600 raid_monitor.conf
-  ```
+- The configuration file should be readable only by the root user (600 permissions)
+- The script should be executable by root (755 permissions)
+- The log file should be writable by root (644 permissions)
+- The state file should be readable/writable by root (600 permissions)
 
 ## Setting up Cron Job
 
-There are two ways to set up the cron job:
+1. Set up a cron job to run the script periodically (e.g., every 5 minutes).
 
-### Method 1: Using /etc/cron.d/ (Recommended)
+   You have two options:
 
-This method is more secure and follows system administration best practices:
-
-1. Create a new cron file:
-   ```bash
-   # Get the absolute path to the script
-   readlink -f raid_monitor.sh
-   
-   # Create the cron file (replace with your actual script path)
-   echo "*/5 * * * * /path/to/raid_monitor.sh" | sudo tee /etc/cron.d/raid_monitor
-   
-   # Set proper permissions
-   sudo chmod 644 /etc/cron.d/raid_monitor
-   ```
-
-2. Verify the cron job is set up:
-   ```bash
-   sudo crontab -l | cat
-   ```
-
-### Method 2: Using crontab -e
-
-Alternatively, you can use the traditional crontab method:
-
-1. Edit the root crontab:
+   a. Using root's crontab (recommended):
    ```bash
    sudo crontab -e
    ```
-
-2. Add the following line (replace with your actual script path):
+   Add this line:
    ```
-   */5 * * * * /path/to/raid_monitor.sh
+   */5 * * * * /full/path/to/raid_monitor.sh
    ```
 
-### Verifying the Cron Job
-
-1. Check if the cron daemon is running:
+   b. Using user's crontab with sudo (less secure):
    ```bash
-   systemctl status cron
+   crontab -e
+   ```
+   Add this line:
+   ```
+   */5 * * * * sudo /full/path/to/raid_monitor.sh
    ```
 
-2. Monitor the log file to see if the script is running:
+   Note: The first option (root's crontab) is recommended because:
+   - It's more secure (no need to configure sudo permissions)
+   - It's cleaner (no sudo prompts or password requirements)
+   - It's the proper way to run system monitoring tasks
+
+## Backup and Maintenance
+
+### Backup Recommendations
+
+1. Backup your configuration:
    ```bash
-   sudo tail -f /var/log/raid_monitor.log
+   # Create a backup directory
+   sudo mkdir -p /etc/raid-monitor/backup
+   
+   # Backup config and script
+   sudo cp /opt/raid_monitor.conf /etc/raid-monitor/backup/
+   sudo cp /opt/raid_monitor.sh /etc/raid-monitor/backup/
    ```
 
-3. You should see entries every 5 minutes like:
-   ```
-   2025-06-11 16:35:00 - [INFO] - === RAID Monitor Started ===
-   2025-06-11 16:35:00 - [INFO] - Starting RAID status check
-   ...
-   2025-06-11 16:35:00 - [INFO] - === RAID Monitor Completed ===
-   ```
-
-### Troubleshooting Cron
-
-If the script isn't running via cron:
-
-1. Check cron logs:
+2. Backup your state file (if modified):
    ```bash
-   sudo grep CRON /var/log/syslog
+   sudo cp /var/lib/raid_monitor/state /etc/raid-monitor/backup/
    ```
 
-2. Verify script permissions:
+3. Backup your log file (optional):
    ```bash
-   ls -l raid_monitor.sh
-   sudo chmod +x raid_monitor.sh  # Make sure it's executable
+   sudo cp /var/log/raid_monitor.log /etc/raid-monitor/backup/
    ```
 
-3. Verify config file permissions:
+### Log Rotation
+
+To prevent log files from growing too large, set up log rotation:
+
+1. Create a logrotate configuration:
    ```bash
-   ls -l raid_monitor.conf
-   # Should show: -rw------- 1 root root
+   sudo nano /etc/logrotate.d/raid_monitor
    ```
 
-4. Test the script manually:
+2. Add the following configuration:
+   ```
+   /var/log/raid_monitor.log {
+       daily
+       rotate 7
+       compress
+       delaycompress
+       missingok
+       notifempty
+       create 644 root root
+   }
+   ```
+
+### Regular Maintenance
+
+1. Check script status:
    ```bash
+   # Verify cron job is running
+   sudo systemctl status cron
+   
+   # Check recent logs
+   sudo tail -n 50 /var/log/raid_monitor.log
+   
+   # Verify Telegram notifications
+   # Send a test message to your bot
+   ```
+
+2. Monitor disk space:
+   ```bash
+   # Check log file size
+   du -h /var/log/raid_monitor.log
+   
+   # Check state file size
+   du -h /var/lib/raid_monitor/state
+   ```
+
+3. Update script (if needed):
+   ```bash
+   # Backup current version
+   sudo cp raid_monitor.sh raid_monitor.sh.bak
+   
+   # Update script
+   # (Copy new version or git pull)
+   
+   # Test new version
    sudo ./raid_monitor.sh
    ```
 
-5. Check if the script path in cron is absolute:
-   ```bash
-   # Use this to get the absolute path
-   readlink -f raid_monitor.sh
-   ```
+## Security Considerations
 
-## Logging
+1. File Permissions:
+   - Config file should be root-owned and 600 permissions
+   - Script should be root-owned and 755 permissions
+   - Log file should be root-owned and 644 permissions
+   - State file should be root-owned and 600 permissions
 
-The script logs all activities to `/var/log/raid_monitor.log` by default. The log includes:
-- Script start and completion
-- RAID array status
-- Health information
-- Telegram notifications
-- Errors and warnings
+2. Telegram Security:
+   - Keep your bot token secure
+   - Regularly rotate your bot token if possible
+   - Use a dedicated bot for monitoring
+   - Consider using a private Telegram channel for notifications
+
+3. System Security:
+   - Run the script as root (required for RAID monitoring)
+   - Keep your system and mdadm updated
+   - Regularly audit log files for suspicious activity
+   - Use a dedicated system user for the bot if possible
 
 ## Troubleshooting
 
-1. Check if the script has execute permissions:
-   ```bash
-   ls -l raid_monitor.sh
-   ```
+### Common Issues and Solutions
 
-2. Verify the configuration file exists and has correct permissions:
-   ```bash
-   ls -l raid_monitor.conf
-   ```
+1. Script not running:
+   - Check cron daemon: `systemctl status cron`
+   - Verify script permissions: `ls -l raid_monitor.sh`
+   - Check cron logs: `sudo grep CRON /var/log/syslog`
+   - Test script manually: `sudo ./raid_monitor.sh`
 
-3. Check the log file for errors:
-   ```bash
-   sudo tail -f /var/log/raid_monitor.log
-   ```
+2. No Telegram notifications:
+   - Verify config file exists and has correct permissions
+   - Check config file location (script looks in multiple places)
+   - Verify bot token: `curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"`
+   - Check chat ID: Send a message to your bot and check getUpdates
+   - Verify internet connectivity: `ping api.telegram.org`
+   - Check script logs for Telegram errors
 
-4. Test Telegram connectivity:
-   ```bash
-   curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
-   ```
+## Support
+
+If you encounter any issues:
+1. Check the troubleshooting section
+2. Review the logs: `sudo tail -f /var/log/raid_monitor.log`
+3. Verify your RAID configuration: `cat /proc/mdstat`
+4. Test Telegram connectivity: `curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"`
 
 ## License
 

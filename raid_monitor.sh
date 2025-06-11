@@ -3,41 +3,6 @@
 # RAID Monitor Script with Telegram Notifications
 # Designed to run from cron (e.g., */5 * * * * /path/to/raid_monitor.sh)
 
-# Get script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-# Default configuration file location
-CONFIG_FILE="${SCRIPT_DIR}/raid_monitor.conf"
-
-# Try to load from config file first
-if [ -f "$CONFIG_FILE" ]; then
-    if ! source "$CONFIG_FILE"; then
-        echo "Error: Failed to load configuration file"
-        exit 1
-    fi
-fi
-
-# If variables are not set from config file, try environment variables
-if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-    # Try to source .bashrc to get environment variables
-    if [ -f "$HOME/.bashrc" ]; then
-        # Only source the specific variables we need
-        TELEGRAM_BOT_TOKEN=$(grep "^export TELEGRAM_BOT_TOKEN=" "$HOME/.bashrc" | cut -d'"' -f2)
-        TELEGRAM_CHAT_ID=$(grep "^export TELEGRAM_CHAT_ID=" "$HOME/.bashrc" | cut -d'"' -f2)
-    fi
-fi
-
-# Validate required configuration
-if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-    echo "Error: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in either:"
-    echo "1. $CONFIG_FILE"
-    echo "2. Environment variables (e.g., in .bashrc)"
-    exit 1
-fi
-
-# Get hostname
-HOSTNAME=$(hostname -s)
-
 # Color codes for console output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -58,14 +23,23 @@ LOG_COLORS=(
 
 # Log file
 LOG_FILE="/var/log/raid_monitor.log"
-STATE_FILE="/var/run/raid_monitor.state"
+STATE_DIR="/var/run"
+STATE_FILE="${STATE_DIR}/raid_monitor.state"
 
-# Ensure log directory exists and is writable
-if [ ! -w "$(dirname "$LOG_FILE")" ]; then
-    # Fallback to user's home directory if /var/log is not writable
-    LOG_FILE="$HOME/raid_monitor.log"
-    log "WARNING" "Warning: /var/log not writable, using fallback log location: $LOG_FILE"
+# Ensure state directory is writable
+if [ ! -w "$STATE_DIR" ]; then
+    # Fallback to user's home directory if /var/run is not writable
+    STATE_DIR="$HOME/.raid_monitor"
+    STATE_FILE="${STATE_DIR}/state"
+    mkdir -p "$STATE_DIR" 2>/dev/null
+    log "WARNING" "State directory not writable, using fallback location: $STATE_DIR"
 fi
+
+# Ensure state file is writable
+touch "$STATE_FILE" 2>/dev/null || {
+    log "ERROR" "Cannot create or write to state file: $STATE_FILE"
+    exit 1
+}
 
 # Log function with timestamp and log level
 log() {
@@ -82,6 +56,40 @@ log() {
         echo -e "${BLUE}$timestamp${NC} - ${color}[$level]${NC} - $message"
     fi
 }
+
+# Get script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Possible configuration file locations
+CONFIG_LOCATIONS=(
+    "${SCRIPT_DIR}/raid_monitor.conf"  # Same directory as script
+    "/opt/raid_monitor.conf"           # System-wide config
+    "/etc/raid_monitor.conf"           # System config directory
+)
+
+# Try to load from config file
+CONFIG_LOADED=false
+for CONFIG_FILE in "${CONFIG_LOCATIONS[@]}"; do
+    if [ -f "$CONFIG_FILE" ]; then
+        if source "$CONFIG_FILE"; then
+            CONFIG_LOADED=true
+            log "INFO" "Loaded configuration from $CONFIG_FILE"
+            break
+        else
+            echo "Error: Failed to load configuration file $CONFIG_FILE"
+        fi
+    fi
+done
+
+# Validate required configuration
+if [ "$CONFIG_LOADED" = "false" ] || [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+    echo "Error: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in one of these config files:"
+    printf "   - %s\n" "${CONFIG_LOCATIONS[@]}"
+    exit 1
+fi
+
+# Get hostname
+HOSTNAME=$(hostname -s)
 
 # Send Telegram message
 send_telegram() {
@@ -226,10 +234,16 @@ get_raid_status() {
     fi
     
     # Update state file
-    if mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null; then
-        log "INFO" "State file updated successfully"
+    if [ -w "$STATE_DIR" ]; then
+        if mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null; then
+            log "INFO" "State file updated successfully at $STATE_FILE"
+        else
+            log "ERROR" "Failed to update state file at $STATE_FILE"
+            rm -f "$STATE_FILE.tmp" 2>/dev/null
+        fi
     else
-        log "ERROR" "Failed to update state file"
+        log "ERROR" "State directory not writable: $STATE_DIR"
+        rm -f "$STATE_FILE.tmp" 2>/dev/null
     fi
 }
 
