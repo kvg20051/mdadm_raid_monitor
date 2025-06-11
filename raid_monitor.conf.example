@@ -1,0 +1,12 @@
+# RAID Monitor Configuration Example
+# Copy this file to raid_monitor.conf and update with your settings
+
+# Telegram Bot Settings (Required)
+TELEGRAM_BOT_TOKEN="your_bot_token_here"
+TELEGRAM_CHAT_ID="your_chat_id_here"
+
+# Optional: Log file location (defaults to /var/log/raid_monitor.log)
+# LOG_FILE="/var/log/raid_monitor.log"
+
+# Optional: State file location (defaults to /var/lib/raid_monitor/state)
+# STATE_FILE="/var/lib/raid_monitor/state" 
